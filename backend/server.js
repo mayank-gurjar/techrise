@@ -21,7 +21,8 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-app.use(express.json()); // Body parser for JSON payloads
+app.use(express.json({ limit: '15mb' })); // Body parser for JSON payloads, supporting high-resolution image uploads
+app.use(express.urlencoded({ limit: '15mb', extended: true }));
 
 // Mount Routes
 app.use('/api/auth', authRoutes);
