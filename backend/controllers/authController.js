@@ -8,6 +8,23 @@ const register = async (req, res) => {
     const { email, password, role, mobile, name } = req.body;
     const normalizedEmail = email.toLowerCase().trim();
 
+    // Restrict employee registration to main admin only
+    if (role.toUpperCase() === 'ADMIN') {
+      const authHeader = req.headers['authorization'];
+      const token = authHeader && authHeader.split(' ')[1];
+      if (!token) {
+        return res.status(401).json({ error: 'Access Denied: Admin authorization required to register new employees.' });
+      }
+      try {
+        const verified = jwt.verify(token, process.env.JWT_SECRET);
+        if (verified.email.toLowerCase() !== 'admin@gmail.com') {
+          return res.status(403).json({ error: 'Access Denied: Only the main administrator can register new employees.' });
+        }
+      } catch (err) {
+        return res.status(403).json({ error: 'Access Denied: Invalid admin token.' });
+      }
+    }
+
     // 1. Check if user already exists
     const userQuery = await db.collection('users').where('email', '==', normalizedEmail).limit(1).get();
     if (!userQuery.empty) {
@@ -118,6 +135,10 @@ const login = async (req, res) => {
 
 const getEmployees = async (req, res) => {
   try {
+    const { email } = req.user;
+    if (email.toLowerCase() !== 'admin@gmail.com') {
+      return res.status(403).json({ error: 'Access Denied: Only the main administrator can view the employee list.' });
+    }
     const snapshot = await db.collection('users').where('role', '==', 'ADMIN').get();
     const employees = [];
     snapshot.forEach(doc => {

@@ -85,12 +85,17 @@ const createComplaint = async (req, res) => {
 // 2. Get complaints list (Admins see all, Customers see only theirs)
 const getComplaints = async (req, res) => {
   try {
-    const { role, userId } = req.user;
+    const { role, userId, email } = req.user;
     let query;
 
     if (role.toUpperCase() === 'ADMIN') {
-      // Admins see all complaints
-      query = db.collection('complaints');
+      if (email.toLowerCase() === 'admin@gmail.com') {
+        // Admins see all complaints
+        query = db.collection('complaints');
+      } else {
+        // Regular employees only see complaints assigned to them
+        query = db.collection('complaints').where('assignedAdminId', '==', userId);
+      }
     } else {
       // Customers only see their own complaints
       query = db.collection('complaints').where('customerId', '==', userId);
@@ -152,7 +157,7 @@ const getComplaints = async (req, res) => {
 const getComplaintById = async (req, res) => {
   try {
     const { id } = req.params;
-    const { role, userId } = req.user;
+    const { role, userId, email } = req.user;
 
     const docRef = db.collection('complaints').doc(id);
     const doc = await docRef.get();
@@ -166,6 +171,11 @@ const getComplaintById = async (req, res) => {
     // Security Check: Customers can only view their own complaints
     if (role.toUpperCase() === 'CUSTOMER' && complaintData.customerId !== userId) {
       return res.status(403).json({ error: 'Access Denied: You cannot view this complaint.' });
+    }
+
+    // Security Check: Employees can only view complaints assigned to them
+    if (role.toUpperCase() === 'ADMIN' && email.toLowerCase() !== 'admin@gmail.com' && complaintData.assignedAdminId !== userId) {
+      return res.status(403).json({ error: 'Access Denied: You are not assigned to this complaint.' });
     }
 
     // Resolve emails/names/mobile
@@ -208,7 +218,7 @@ const updateComplaintStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status, comment, priority } = req.body;
-    const adminId = req.user.userId;
+    const { role, userId, email } = req.user;
 
     if (!status || !['PENDING', 'IN_PROGRESS', 'RESOLVED'].includes(status.toUpperCase())) {
       return res.status(400).json({ error: 'Invalid status. Choose PENDING, IN_PROGRESS, or RESOLVED.' });
@@ -222,17 +232,28 @@ const updateComplaintStatus = async (req, res) => {
     }
 
     const complaintData = doc.data();
+
+    // Security Check: Employees can only update complaints assigned to them
+    if (email.toLowerCase() !== 'admin@gmail.com' && complaintData.assignedAdminId !== userId) {
+      return res.status(403).json({ error: 'Access Denied: You are not assigned to this complaint.' });
+    }
+
     const oldStatus = complaintData.status;
     const newStatus = status.toUpperCase();
 
     const updates = {
       status: newStatus,
-      assignedAdminId: req.body.assignedAdminId !== undefined ? req.body.assignedAdminId : (complaintData.assignedAdminId || adminId),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     };
 
-    if (priority && ['LOW', 'MEDIUM', 'HIGH'].includes(priority.toUpperCase())) {
-      updates.priority = priority.toUpperCase();
+    // Only main Admin can assign or change priority
+    if (email.toLowerCase() === 'admin@gmail.com') {
+      if (req.body.assignedAdminId !== undefined) {
+        updates.assignedAdminId = req.body.assignedAdminId;
+      }
+      if (priority && ['LOW', 'MEDIUM', 'HIGH'].includes(priority.toUpperCase())) {
+        updates.priority = priority.toUpperCase();
+      }
     }
 
     // Update complaint record
@@ -266,7 +287,7 @@ const updateComplaintStatus = async (req, res) => {
 const getComplaintLogs = async (req, res) => {
   try {
     const { id } = req.params;
-    const { role, userId } = req.user;
+    const { role, userId, email } = req.user;
 
     // Verify complaint existence and access permission first
     const complaintDoc = await db.collection('complaints').doc(id).get();
@@ -276,6 +297,11 @@ const getComplaintLogs = async (req, res) => {
 
     const complaintData = complaintDoc.data();
     if (role.toUpperCase() === 'CUSTOMER' && complaintData.customerId !== userId) {
+      return res.status(403).json({ error: 'Access Denied: You cannot view this audit trail.' });
+    }
+
+    // Security Check: Employees can only view logs of complaints assigned to them
+    if (role.toUpperCase() === 'ADMIN' && email.toLowerCase() !== 'admin@gmail.com' && complaintData.assignedAdminId !== userId) {
       return res.status(403).json({ error: 'Access Denied: You cannot view this audit trail.' });
     }
 

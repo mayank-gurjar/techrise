@@ -130,11 +130,31 @@ async function showDashboard() {
     dashboardContainer.classList.remove('hidden');
     userEmailEl.textContent = userEmail;
     
+    // Check if user is the main coordinator admin
+    const isAdmin = userEmail.toLowerCase() === 'admin@gmail.com';
+    
+    // Hide administrative tabs for normal employees
+    navItems.forEach(item => {
+        const tabId = item.getAttribute('data-tab');
+        if (tabId !== 'tab-complaints' && !isAdmin) {
+            item.style.display = 'none';
+        } else {
+            item.style.display = 'flex';
+        }
+    });
+
+    // Make sure we start on the complaints tab
+    switchTab('tab-complaints');
+
     // Load initial data
-    await loadEmployees();
+    if (isAdmin) {
+        await loadEmployees();
+        loadNews();
+        loadBanners();
+    } else {
+        employees = [];
+    }
     loadComplaints();
-    loadNews();
-    loadBanners();
     
     // Start background updates and alarm polling
     startPolling();
@@ -465,6 +485,7 @@ function renderComplaints() {
                                 <option value="RESOLVED" ${c.status === 'RESOLVED' ? 'selected' : ''}>Resolved</option>
                             </select>
                         </div>
+                        ${userEmail.toLowerCase() === 'admin@gmail.com' ? `
                         <div style="display: flex; flex-direction: column; flex: 1; gap: 4px;">
                             <label style="font-size: 11px; color: var(--text-secondary); font-weight: 500;">Priority</label>
                             <select id="priority-select-${c.id}" style="width: 100%;">
@@ -473,7 +494,9 @@ function renderComplaints() {
                                 <option value="HIGH" ${c.priority === 'HIGH' ? 'selected' : ''}>High</option>
                             </select>
                         </div>
+                        ` : ''}
                     </div>
+                    ${userEmail.toLowerCase() === 'admin@gmail.com' ? `
                     <div class="action-form-row" style="margin-bottom: 4px;">
                         <div style="display: flex; flex-direction: column; flex: 1; gap: 4px;">
                             <label style="font-size: 11px; color: var(--text-secondary); font-weight: 500;">Assignee</label>
@@ -485,7 +508,8 @@ function renderComplaints() {
                             </select>
                         </div>
                     </div>
-                    <button class="btn-update" data-id="${c.id}" style="width: 100%; margin-top: 4px;">Update Details</button>
+                    ` : ''}
+                    <button class="btn-update" data-id="${c.id}" style="width: 100%; margin-top: 4px;">Update Status</button>
                 </div>
             </div>
         `;
@@ -505,23 +529,25 @@ function renderComplaints() {
 async function updateStatus(complaintId) {
     const select = document.getElementById(`status-select-${complaintId}`);
     const newStatus = select.value;
+    
     const empSelect = document.getElementById(`employee-select-${complaintId}`);
-    const assignedAdminId = empSelect.value || null;
+    const assignedAdminId = empSelect ? (empSelect.value || null) : undefined;
+    
     const priSelect = document.getElementById(`priority-select-${complaintId}`);
-    const newPriority = priSelect.value;
+    const newPriority = priSelect ? priSelect.value : undefined;
 
     try {
+        const reqBody = { status: newStatus };
+        if (assignedAdminId !== undefined) reqBody.assignedAdminId = assignedAdminId;
+        if (newPriority !== undefined) reqBody.priority = newPriority;
+
         const response = await fetch(`/api/complaints/${complaintId}/status`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify({ 
-                status: newStatus,
-                assignedAdminId: assignedAdminId,
-                priority: newPriority
-            })
+            body: JSON.stringify(reqBody)
         });
 
         const data = await response.json();
