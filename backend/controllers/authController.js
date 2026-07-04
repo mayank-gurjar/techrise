@@ -8,7 +8,7 @@ const register = async (req, res) => {
     const { email, password, role, mobile, name } = req.body;
     const normalizedEmail = email.toLowerCase().trim();
 
-    // Restrict employee registration to main admin only
+    // Restrict employee registration to main admin or coordinators
     if (role.toUpperCase() === 'ADMIN') {
       const authHeader = req.headers['authorization'];
       const token = authHeader && authHeader.split(' ')[1];
@@ -17,8 +17,8 @@ const register = async (req, res) => {
       }
       try {
         const verified = jwt.verify(token, process.env.JWT_SECRET);
-        if (verified.email.toLowerCase() !== 'admin@gmail.com') {
-          return res.status(403).json({ error: 'Access Denied: Only the main administrator can register new employees.' });
+        if (verified.email.toLowerCase() !== 'admin@gmail.com' && !verified.isCoordinator) {
+          return res.status(403).json({ error: 'Access Denied: Only administrators can register new employees.' });
         }
       } catch (err) {
         return res.status(403).json({ error: 'Access Denied: Invalid admin token.' });
@@ -48,6 +48,7 @@ const register = async (req, res) => {
       role: role.toUpperCase(),
       mobile: mobile ? mobile.trim() : '',
       name: name ? name.trim() : '',
+      isCoordinator: req.body.isCoordinator || false,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
@@ -110,7 +111,8 @@ const login = async (req, res) => {
       userId: userDoc.id,
       email: userData.email,
       role: userData.role,
-      sessionId: sessionId
+      sessionId: sessionId,
+      isCoordinator: userData.isCoordinator || false
     };
 
     const token = jwt.sign(payload, process.env.JWT_SECRET, {
@@ -123,7 +125,8 @@ const login = async (req, res) => {
       user: {
         id: userDoc.id,
         email: userData.email,
-        role: userData.role
+        role: userData.role,
+        isCoordinator: userData.isCoordinator || false
       }
     });
 
@@ -135,9 +138,9 @@ const login = async (req, res) => {
 
 const getEmployees = async (req, res) => {
   try {
-    const { email } = req.user;
-    if (email.toLowerCase() !== 'admin@gmail.com') {
-      return res.status(403).json({ error: 'Access Denied: Only the main administrator can view the employee list.' });
+    const { email, isCoordinator } = req.user;
+    if (email.toLowerCase() !== 'admin@gmail.com' && !isCoordinator) {
+      return res.status(403).json({ error: 'Access Denied: Only administrators can view the employee list.' });
     }
     const snapshot = await db.collection('users').where('role', '==', 'ADMIN').get();
     const employees = [];

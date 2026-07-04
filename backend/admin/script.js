@@ -1,6 +1,7 @@
 // App State
 let token = localStorage.getItem('crm_token') || null;
 let userEmail = localStorage.getItem('crm_email') || null;
+let isCoordinator = localStorage.getItem('crm_is_coordinator') === 'true';
 let complaints = [];
 let news = [];
 let employees = [];
@@ -130,8 +131,8 @@ async function showDashboard() {
     dashboardContainer.classList.remove('hidden');
     userEmailEl.textContent = userEmail;
     
-    // Check if user is the main coordinator admin
-    const isAdmin = userEmail.toLowerCase() === 'admin@gmail.com';
+    // Check if user is the main coordinator admin or manager
+    const isAdmin = userEmail.toLowerCase() === 'admin@gmail.com' || isCoordinator;
     
     // Hide administrative tabs for normal employees
     navItems.forEach(item => {
@@ -233,8 +234,10 @@ async function handleLogin(e) {
         // Save token and display
         token = data.token;
         userEmail = data.user.email;
+        isCoordinator = data.user.isCoordinator || false;
         localStorage.setItem('crm_token', token);
         localStorage.setItem('crm_email', userEmail);
+        localStorage.setItem('crm_is_coordinator', isCoordinator ? 'true' : 'false');
 
         showToast('Welcome to Tech Rise Portal!', 'success');
         showDashboard();
@@ -294,8 +297,10 @@ function handleLogout() {
     knownComplaintIds = null;
     token = null;
     userEmail = null;
+    isCoordinator = false;
     localStorage.removeItem('crm_token');
     localStorage.removeItem('crm_email');
+    localStorage.removeItem('crm_is_coordinator');
     showToast('Logged out successfully.');
     showLogin();
 }
@@ -501,7 +506,7 @@ function renderComplaints() {
                                 <option value="RESOLVED" ${c.status === 'RESOLVED' ? 'selected' : ''}>Resolved</option>
                             </select>
                         </div>
-                        ${userEmail.toLowerCase() === 'admin@gmail.com' ? `
+                        ${(userEmail.toLowerCase() === 'admin@gmail.com' || isCoordinator) ? `
                         <div style="display: flex; flex-direction: column; flex: 1; gap: 4px;">
                             <label style="font-size: 11px; color: var(--text-secondary); font-weight: 500;">Priority</label>
                             <select id="priority-select-${c.id}" style="width: 100%;">
@@ -512,7 +517,7 @@ function renderComplaints() {
                         </div>
                         ` : ''}
                     </div>
-                    ${userEmail.toLowerCase() === 'admin@gmail.com' ? `
+                    ${(userEmail.toLowerCase() === 'admin@gmail.com' || isCoordinator) ? `
                     <div class="action-form-row" style="margin-bottom: 4px;">
                         <div style="display: flex; flex-direction: column; flex: 1; gap: 4px;">
                             <label style="font-size: 11px; color: var(--text-secondary); font-weight: 500;">Assignee</label>
@@ -721,6 +726,7 @@ async function handleRegisterEmployee(e) {
     const email = document.getElementById('emp-email').value;
     const password = document.getElementById('emp-password').value;
     const mobile = document.getElementById('emp-mobile').value;
+    const isCoordinatorCheck = document.getElementById('emp-is-coordinator').checked;
     const btnRegister = document.getElementById('btn-register-employee');
 
     btnRegister.disabled = true;
@@ -738,7 +744,8 @@ async function handleRegisterEmployee(e) {
                 email: email.trim(),
                 password: password,
                 role: 'ADMIN', // Employee role
-                mobile: mobile.trim()
+                mobile: mobile.trim(),
+                isCoordinator: isCoordinatorCheck
             })
         });
 

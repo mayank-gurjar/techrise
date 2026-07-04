@@ -1088,7 +1088,7 @@ fun SupportTabContent() {
     )
 
     val context = LocalContext.current
-    val supportPhone = "8062179339"
+    val supportPhone = "08062179339"
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -1128,7 +1128,7 @@ fun SupportTabContent() {
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                "8062179339",
+                                "08062179339",
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
                             )

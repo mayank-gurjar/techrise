@@ -89,7 +89,7 @@ const getComplaints = async (req, res) => {
     let query;
 
     if (role.toUpperCase() === 'ADMIN') {
-      if (email.toLowerCase() === 'admin@gmail.com') {
+      if (email.toLowerCase() === 'admin@gmail.com' || req.user.isCoordinator) {
         // Admins see all complaints
         query = db.collection('complaints');
       } else {
@@ -174,7 +174,7 @@ const getComplaintById = async (req, res) => {
     }
 
     // Security Check: Employees can only view complaints assigned to them
-    if (role.toUpperCase() === 'ADMIN' && email.toLowerCase() !== 'admin@gmail.com' && complaintData.assignedAdminId !== userId) {
+    if (role.toUpperCase() === 'ADMIN' && email.toLowerCase() !== 'admin@gmail.com' && !req.user.isCoordinator && complaintData.assignedAdminId !== userId) {
       return res.status(403).json({ error: 'Access Denied: You are not assigned to this complaint.' });
     }
 
@@ -234,7 +234,7 @@ const updateComplaintStatus = async (req, res) => {
     const complaintData = doc.data();
 
     // Security Check: Employees can only update complaints assigned to them
-    if (email.toLowerCase() !== 'admin@gmail.com' && complaintData.assignedAdminId !== userId) {
+    if (email.toLowerCase() !== 'admin@gmail.com' && !req.user.isCoordinator && complaintData.assignedAdminId !== userId) {
       return res.status(403).json({ error: 'Access Denied: You are not assigned to this complaint.' });
     }
 
@@ -246,8 +246,8 @@ const updateComplaintStatus = async (req, res) => {
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     };
 
-    // Only main Admin can assign or change priority
-    if (email.toLowerCase() === 'admin@gmail.com') {
+    // Only main Admin or Coordinators can assign or change priority
+    if (email.toLowerCase() === 'admin@gmail.com' || req.user.isCoordinator) {
       if (req.body.assignedAdminId !== undefined) {
         updates.assignedAdminId = req.body.assignedAdminId;
       }
@@ -301,7 +301,7 @@ const getComplaintLogs = async (req, res) => {
     }
 
     // Security Check: Employees can only view logs of complaints assigned to them
-    if (role.toUpperCase() === 'ADMIN' && email.toLowerCase() !== 'admin@gmail.com' && complaintData.assignedAdminId !== userId) {
+    if (role.toUpperCase() === 'ADMIN' && email.toLowerCase() !== 'admin@gmail.com' && !req.user.isCoordinator && complaintData.assignedAdminId !== userId) {
       return res.status(403).json({ error: 'Access Denied: You cannot view this audit trail.' });
     }
 
