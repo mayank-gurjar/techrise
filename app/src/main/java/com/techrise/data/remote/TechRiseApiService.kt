@@ -112,6 +112,7 @@ data class BannerResponse(
     val title: String,
     val imageBase64: String,
     val authorId: String,
+    val redirectUrl: String? = null,
     val createdAt: FirestoreTimestamp? = null
 )
 

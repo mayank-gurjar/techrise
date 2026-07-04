@@ -823,9 +823,16 @@ function renderBanners() {
                 <img src="${b.imageBase64}" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover;" alt="Banner">
             </div>
             <div style="display: flex; flex-direction: column; justify-content: space-between; gap: 8px; flex: 1;">
-                <h4 style="margin: 0; font-size: 14px; font-weight: 600; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
-                    ${escapeHtml(b.title) || 'Untitled Banner'}
-                </h4>
+                <div>
+                    <h4 style="margin: 0; font-size: 14px; font-weight: 600; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+                        ${escapeHtml(b.title) || 'Untitled Banner'}
+                    </h4>
+                    ${b.redirectUrl ? `
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+                        Link: <a href="${escapeHtml(b.redirectUrl)}" target="_blank" style="color: #ff9100; text-decoration: underline;">${escapeHtml(b.redirectUrl)}</a>
+                    </div>
+                    ` : ''}
+                </div>
                 <button class="btn-secondary" data-id="${b.id}" style="width: 100%; padding: 6px 12px; font-size: 12px; background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 4px; cursor: pointer;">
                     Delete Banner
                 </button>
@@ -847,6 +854,7 @@ function renderBanners() {
 async function handleUploadBanner(e) {
     e.preventDefault();
     const titleInput = document.getElementById('banner-title');
+    const urlInput = document.getElementById('banner-url');
     const fileInput = document.getElementById('banner-file');
     const btnUpload = document.getElementById('btn-upload-banner');
 
@@ -873,6 +881,7 @@ async function handleUploadBanner(e) {
                 },
                 body: JSON.stringify({
                     title: titleInput.value,
+                    redirectUrl: urlInput.value,
                     imageBase64: base64String
                 })
             });

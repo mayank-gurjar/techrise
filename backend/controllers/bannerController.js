@@ -3,7 +3,7 @@ const { admin, db } = require('../config/firebase');
 // Create a sliding banner (Admin only)
 const createBanner = async (req, res) => {
   try {
-    const { title, imageBase64 } = req.body;
+    const { title, imageBase64, redirectUrl } = req.body;
     const authorId = req.user.userId;
 
     if (!imageBase64 || !imageBase64.trim()) {
@@ -13,6 +13,7 @@ const createBanner = async (req, res) => {
     const bannerRef = await db.collection('banners').add({
       title: title ? title.trim() : '',
       imageBase64: imageBase64.trim(),
+      redirectUrl: redirectUrl ? redirectUrl.trim() : '',
       authorId,
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
@@ -20,7 +21,8 @@ const createBanner = async (req, res) => {
     return res.status(201).json({
       message: 'Banner uploaded successfully.',
       id: bannerRef.id,
-      title: title ? title.trim() : ''
+      title: title ? title.trim() : '',
+      redirectUrl: redirectUrl ? redirectUrl.trim() : ''
     });
 
   } catch (err) {
@@ -41,6 +43,7 @@ const getBanners = async (req, res) => {
         id: doc.id,
         title: data.title || '',
         imageBase64: data.imageBase64,
+        redirectUrl: data.redirectUrl || '',
         authorId: data.authorId,
         createdAt: data.createdAt
       });

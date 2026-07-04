@@ -301,12 +301,14 @@ data class SlideData(
     val background: Brush,
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
     val imageRes: Int? = null,
-    val imageBitmap: ImageBitmap? = null
+    val imageBitmap: ImageBitmap? = null,
+    val redirectUrl: String? = null
 )
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SlidingBanner(banners: List<BannerResponse>) {
+    val context = LocalContext.current
     val slides = if (banners.isNotEmpty()) {
         banners.map { banner ->
             val bitmap = try {
@@ -324,11 +326,12 @@ fun SlidingBanner(banners: List<BannerResponse>) {
 
             SlideData(
                 title = banner.title,
-                description = "Click to view detail",
+                description = if (!banner.redirectUrl.isNullOrBlank()) "Tap to open link" else "Click to view detail",
                 background = Brush.linearGradient(listOf(Color(0xFFFF8F00), Color(0xFFFF5722))),
                 icon = Icons.Default.Send,
                 imageRes = null,
-                imageBitmap = bitmap
+                imageBitmap = bitmap,
+                redirectUrl = banner.redirectUrl
             )
         }
     } else {
@@ -404,6 +407,16 @@ fun SlidingBanner(banners: List<BannerResponse>) {
                         scaleX = scale
                         scaleY = scale
                         this.alpha = alpha
+                    }
+                    .clickable {
+                        if (!data.redirectUrl.isNullOrBlank()) {
+                            try {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(data.redirectUrl))
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+                        }
                     },
                 shape = RoundedCornerShape(24.dp),
                 elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
