@@ -851,6 +851,49 @@ function renderBanners() {
     });
 }
 
+function compressImage(file, maxWidth, maxHeight, quality) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = function (event) {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = function () {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+
+                // Downscale if image exceeds max bounds
+                if (width > maxWidth || height > maxHeight) {
+                    if (width > height) {
+                        height = Math.round((height * maxWidth) / width);
+                        width = maxWidth;
+                    } else {
+                        width = Math.round((width * maxHeight) / height);
+                        height = maxHeight;
+                    }
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                // Export to JPEG with quality compression
+                const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
+                resolve(compressedBase64);
+            };
+            img.onerror = function (err) {
+                reject(new Error('Failed to load image for compression.'));
+            };
+        };
+        reader.onerror = function (err) {
+            reject(new Error('Failed to read image file.'));
+        };
+    });
+}
+
 async function handleUploadBanner(e) {
     e.preventDefault();
     const titleInput = document.getElementById('banner-title');
@@ -867,49 +910,38 @@ async function handleUploadBanner(e) {
     btnUpload.disabled = true;
     btnUpload.textContent = 'Uploading...';
 
-    // Convert file to Base64
-    const reader = new FileReader();
-    reader.onload = async function() {
-        const base64String = reader.result;
+    try {
+        // Compress and resize image to 1280x720 max at 75% quality
+        const base64String = await compressImage(file, 1280, 720, 0.75);
 
-        try {
-            const response = await fetch('/api/banners', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    title: titleInput.value,
-                    redirectUrl: urlInput.value,
-                    imageBase64: base64String
-                })
-            });
+        const response = await fetch('/api/banners', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                title: titleInput.value,
+                redirectUrl: urlInput.value,
+                imageBase64: base64String
+            })
+        });
 
-            const data = await response.json();
+        const data = await response.json();
 
-            if (!response.ok) {
-                throw new Error(data.error || 'Failed to upload banner.');
-            }
-
-            showToast('Banner uploaded successfully!', 'success');
-            document.getElementById('banner-upload-form').reset();
-            loadBanners();
-        } catch (err) {
-            showToast(err.message, 'error');
-        } finally {
-            btnUpload.disabled = false;
-            btnUpload.textContent = 'Upload Banner';
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to upload banner.');
         }
-    };
 
-    reader.onerror = function() {
-        showToast('Error reading image file.', 'error');
+        showToast('Banner uploaded successfully!', 'success');
+        document.getElementById('banner-upload-form').reset();
+        loadBanners();
+    } catch (err) {
+        showToast(err.message, 'error');
+    } finally {
         btnUpload.disabled = false;
         btnUpload.textContent = 'Upload Banner';
-    };
-
-    reader.readAsDataURL(file);
+    }
 }
 
 async function deleteBanner(id) {
