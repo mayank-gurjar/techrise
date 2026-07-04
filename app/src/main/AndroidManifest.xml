@@ -19,7 +19,7 @@
         android:roundIcon="@drawable/logo"
         android:supportsRtl="true"
         android:theme="@style/Theme.TechRise"
-        android:usesCleartextTraffic="true"
+        android:usesCleartextTraffic="false"
         tools:targetApi="34">
         
         <!-- Disable default WorkManager initializer for Hilt Worker Injection -->
