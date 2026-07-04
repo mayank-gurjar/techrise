@@ -472,6 +472,22 @@ function renderComplaints() {
                     <span class="meta-label">Assigned To:</span>
                     <span class="meta-value">${c.assignedAdminEmail ? escapeHtml(c.assignedAdminEmail) : '<em style="color: var(--text-muted);">Unassigned</em>'}</span>
                 </div>
+                ${c.rating ? `
+                <div class="meta-item feedback-section" style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border-color); display: flex; align-items: center; gap: 8px;">
+                    <span class="meta-label" style="font-weight: bold; color: var(--text-primary);">Feedback:</span>
+                    <span class="meta-value" style="font-weight: bold; color: #e65100; font-size: 15px;">
+                        ${'★'.repeat(c.rating)}${'☆'.repeat(5 - c.rating)} (${c.rating}/5)
+                    </span>
+                </div>
+                ${c.feedbackComment ? `
+                <div class="meta-item" style="margin-top: 4px;">
+                    <span class="meta-label" style="font-weight: 500;">Comment:</span>
+                    <span class="meta-value" style="font-style: italic; color: #444; background: #fff8f4; padding: 4px 8px; border-left: 3px solid #e65100; border-radius: 2px; width: 100%; display: block; box-sizing: border-box; margin-top: 4px;">
+                        "${escapeHtml(c.feedbackComment)}"
+                    </span>
+                </div>
+                ` : ''}
+                ` : ''}
             </div>
 
             <div class="card-actions">
