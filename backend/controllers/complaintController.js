@@ -15,10 +15,16 @@ const createComplaint = async (req, res) => {
       ? priority.toUpperCase() 
       : 'MEDIUM';
 
-    // Generate clean short Complaint ID
-    const snapshot = await db.collection('complaints').get();
-    const count = snapshot.size;
-    const cleanId = `TKT-${1001 + count}`;
+    // Generate clean short unique Complaint ID
+    let cleanId;
+    let isUnique = false;
+    while (!isUnique) {
+      cleanId = `TKT-${Math.floor(100000 + Math.random() * 900000)}`;
+      const existingDoc = await db.collection('complaints').doc(cleanId).get();
+      if (!existingDoc.exists) {
+        isUnique = true;
+      }
+    }
 
     // Create complaint document
     const complaintData = {
@@ -262,7 +268,7 @@ const updateComplaintStatus = async (req, res) => {
     // Write transition to logs collection
     await db.collection('complaintLogs').add({
       complaintId: id,
-      actionBy: adminId,
+      actionBy: userId,
       oldStatus: oldStatus,
       newStatus: newStatus,
       comment: comment || `Status updated to ${newStatus}.`,
@@ -274,7 +280,7 @@ const updateComplaintStatus = async (req, res) => {
       complaintId: id,
       oldStatus,
       newStatus,
-      assignedAdminId: adminId
+      assignedAdminId: updates.assignedAdminId || complaintData.assignedAdminId || null
     });
 
   } catch (err) {
