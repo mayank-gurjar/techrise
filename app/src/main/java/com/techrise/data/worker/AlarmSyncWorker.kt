@@ -27,19 +27,46 @@ class AlarmSyncWorker @AssistedInject constructor(
             return Result.success()
         }
 
+        val prefs = context.getSharedPreferences("techrise_alarm_prefs", Context.MODE_PRIVATE)
+        val seenComplaints = prefs.getStringSet("seen_complaints", emptySet())?.toMutableSet() ?: mutableSetOf()
+        val escalatedComplaints = prefs.getStringSet("escalated_complaints", emptySet())?.toMutableSet() ?: mutableSetOf()
+
+        var alarmTriggered = false
+
         // 2. Fetch all complaints
         repository.getComplaints().onSuccess { complaints ->
-            val sevenDaysInSeconds = 7 * 24 * 60 * 60
+            val twentyFourHoursInSeconds = 24 * 60 * 60
             val currentSeconds = System.currentTimeMillis() / 1000
 
-            val stagnantComplaints = complaints.filter { complaint ->
-                complaint.status.uppercase() != "RESOLVED" && 
-                complaint.createdAt?.let { (currentSeconds - it._seconds) > sevenDaysInSeconds } == true
+            complaints.forEach { complaint ->
+                val id = complaint.id
+                val isResolved = complaint.status.uppercase() == "RESOLVED"
+
+                // Check A: New Complaint Alarm (only if not resolved and not seen before)
+                if (!isResolved && !seenComplaints.contains(id)) {
+                    triggerNewComplaintAlarm(complaint.title, id)
+                    seenComplaints.add(id)
+                    alarmTriggered = true
+                }
+
+                // Check B: 24-Hour Unresolved Alarm (only if not resolved, older than 24 hours, and not escalated before)
+                val ageSeconds = complaint.createdAt?.let { currentSeconds - it._seconds } ?: 0
+                if (!isResolved && ageSeconds > twentyFourHoursInSeconds && !escalatedComplaints.contains(id)) {
+                    triggerEscalationAlarm(complaint.title, id)
+                    escalatedComplaints.add(id)
+                    alarmTriggered = true
+                }
             }
 
-            // 3. Trigger alarm notifications for each stagnant complaint
-            stagnantComplaints.forEach { complaint ->
-                triggerEscalationAlarm(complaint.title, complaint.id)
+            // Save updated sets to SharedPreferences
+            prefs.edit()
+                .putStringSet("seen_complaints", seenComplaints)
+                .putStringSet("escalated_complaints", escalatedComplaints)
+                .apply()
+
+            if (alarmTriggered) {
+                // Play alarming sound for 8 seconds
+                playAlarmSound(context, 8000)
             }
         }.onFailure {
             return Result.retry()
@@ -48,16 +75,69 @@ class AlarmSyncWorker @AssistedInject constructor(
         return Result.success()
     }
 
-    private fun triggerEscalationAlarm(complaintTitle: String, complaintId: String) {
-        val channelId = "techrise_escalation_alarms"
+    private fun playAlarmSound(context: Context, durationMs: Long) {
+        try {
+            val alertUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            val ringtone = RingtoneManager.getRingtone(context, alertUri)
+            if (ringtone != null) {
+                // Play the sound on the main thread
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    ringtone.play()
+                    // Stop after the duration (8 seconds)
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        if (ringtone.isPlaying) {
+                            ringtone.stop()
+                        }
+                    }, durationMs)
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun triggerNewComplaintAlarm(complaintTitle: String, complaintId: String) {
+        val channelId = "techrise_new_complaints"
         val notificationId = complaintId.hashCode()
 
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         // Create Channel for Android 8.0+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val name = "Tech Rise New Complaints"
+            val descriptionText = "Loud alarm warnings for newly received complaints"
+            val importance = NotificationManager.IMPORTANCE_HIGH
+            val channel = NotificationChannel(channelId, name, importance).apply {
+                description = descriptionText
+                enableLights(true)
+                lightColor = android.graphics.Color.GREEN
+                enableVibration(true)
+            }
+            notificationManager.createNotificationChannel(channel)
+        }
+
+        val builder = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setContentTitle("🚨 NEW COMPLAINT RECEIVED")
+            .setContentText("New Ticket $complaintId: '$complaintTitle'")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setAutoCancel(true)
+
+        notificationManager.notify(notificationId, builder.build())
+    }
+
+    private fun triggerEscalationAlarm(complaintTitle: String, complaintId: String) {
+        val channelId = "techrise_escalation_alarms"
+        val notificationId = complaintId.hashCode() + 1 // Offset to avoid collisions
+
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        // Create Channel for Android 8.0+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val name = "Tech Rise Escalation Alarms"
-            val descriptionText = "Loud alarm warnings for 7-day stagnant complaints"
+            val descriptionText = "Loud alarm warnings for 24-hour stagnant complaints"
             val importance = NotificationManager.IMPORTANCE_HIGH
             val channel = NotificationChannel(channelId, name, importance).apply {
                 description = descriptionText
@@ -69,19 +149,12 @@ class AlarmSyncWorker @AssistedInject constructor(
             notificationManager.createNotificationChannel(channel)
         }
 
-        // High priority alarm sound
-        val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM) 
-            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle("⚠️ 7-DAY UNRESOLVED ALARM")
-            .setContentText("Complaint: '$complaintTitle' is stagnant and requires immediate action!")
+            .setContentTitle("⚠️ 24-HOUR UNRESOLVED ALARM")
+            .setContentText("Complaint $complaintId: '$complaintTitle' is unresolved for over 24 hours!")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setSound(soundUri)
-            .setVibrate(longArrayOf(100, 400, 100, 400, 100, 400, 500, 1000))
             .setAutoCancel(true)
 
         notificationManager.notify(notificationId, builder.build())
