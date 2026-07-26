@@ -7,6 +7,7 @@ let news = [];
 let employees = [];
 let banners = [];
 let knownComplaintIds = null;
+let knownEscalatedIds = new Set();
 let pollingInterval = null;
 
 // DOM Elements
@@ -254,23 +255,31 @@ async function handleLogin(e) {
 function playAlarmSound() {
     try {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const playBeep = (time, duration, frequency) => {
+        let count = 0;
+        const interval = setInterval(() => {
+            if (count >= 16) { // 16 beeps * 0.5s = 8 seconds total
+                clearInterval(interval);
+                audioCtx.close();
+                return;
+            }
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             osc.connect(gain);
             gain.connect(audioCtx.destination);
-            osc.type = 'sine';
-            osc.frequency.value = frequency;
-            gain.gain.setValueAtTime(0.3, time);
-            gain.gain.exponentialRampToValueAtTime(0.01, time + duration - 0.05);
-            osc.start(time);
-            osc.stop(time + duration);
-        };
-        const now = audioCtx.currentTime;
-        playBeep(now, 0.15, 880);
-        playBeep(now + 0.2, 0.15, 880);
-        playBeep(now + 0.5, 0.15, 880);
-        playBeep(now + 0.7, 0.15, 880);
+            
+            // Sawtooth waveform creates a sharp industrial alert sound
+            osc.type = 'sawtooth';
+            // Sweep frequency from 880Hz down to 440Hz for a police/siren effect
+            osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.3);
+            
+            gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.35);
+            
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.4);
+            count++;
+        }, 500);
     } catch (err) {
         console.error('Failed to play synthesized alarm sound:', err);
     }
@@ -295,6 +304,7 @@ function stopPolling() {
 function handleLogout() {
     stopPolling();
     knownComplaintIds = null;
+    knownEscalatedIds = new Set();
     token = null;
     userEmail = null;
     isCoordinator = false;
@@ -329,15 +339,38 @@ async function loadComplaints(isSilent = false) {
 
         const data = await response.json();
         
-        let hasNew = false;
+        let shouldAlarm = false;
+        
         if (knownComplaintIds === null) {
             knownComplaintIds = new Set(data.map(c => c.id));
+            knownEscalatedIds = new Set();
+            // Pre-populate old stagnant tickets so we don't alarm on initial page load
+            data.forEach(c => {
+                const timestamp = c.createdAt ? (c.createdAt._seconds ? c.createdAt._seconds * 1000 : c.createdAt.seconds * 1000) : Date.now();
+                const ageMs = Date.now() - timestamp;
+                const isResolved = c.status === 'RESOLVED';
+                if (!isResolved && ageMs > 24 * 60 * 60 * 1000) {
+                    knownEscalatedIds.add(c.id);
+                }
+            });
         } else {
             data.forEach(c => {
-                if (!knownComplaintIds.has(c.id)) {
+                const isResolved = c.status === 'RESOLVED';
+                
+                // Check A: New complaint received
+                if (!isResolved && !knownComplaintIds.has(c.id)) {
                     knownComplaintIds.add(c.id);
-                    hasNew = true;
-                    showToast(`New complaint received: "${c.title}"`, 'info');
+                    shouldAlarm = true;
+                    showToast(`🚨 New complaint received: "${c.title}" (ID: ${c.id})`, 'info');
+                }
+                
+                // Check B: 24-Hour escalation check
+                const timestamp = c.createdAt ? (c.createdAt._seconds ? c.createdAt._seconds * 1000 : c.createdAt.seconds * 1000) : Date.now();
+                const ageMs = Date.now() - timestamp;
+                if (!isResolved && ageMs > 24 * 60 * 60 * 1000 && !knownEscalatedIds.has(c.id)) {
+                    knownEscalatedIds.add(c.id);
+                    shouldAlarm = true;
+                    showToast(`⚠️ 24-Hour Alert: Complaint "${c.title}" (ID: ${c.id}) is unresolved!`, 'warning');
                 }
             });
         }
@@ -346,7 +379,7 @@ async function loadComplaints(isSilent = false) {
         calculateStats();
         renderComplaints();
 
-        if (hasNew) {
+        if (shouldAlarm) {
             playAlarmSound();
         }
 
