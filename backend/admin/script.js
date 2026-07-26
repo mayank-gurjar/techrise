@@ -252,16 +252,48 @@ async function handleLogin(e) {
     }
 }
 
+let audioCtxInstance = null;
+
+function getAudioContext() {
+    if (!audioCtxInstance) {
+        audioCtxInstance = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    return audioCtxInstance;
+}
+
+// User interaction gesture to unlock/resume audio output
+function unlockAudio() {
+    try {
+        const ctx = getAudioContext();
+        if (ctx && ctx.state === 'suspended') {
+            ctx.resume();
+        }
+    } catch (e) {
+        console.error('Failed to unlock AudioContext:', e);
+    }
+}
+document.addEventListener('click', unlockAudio, { once: false });
+document.addEventListener('keydown', unlockAudio, { once: false });
+
 function playAlarmSound() {
     try {
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const audioCtx = getAudioContext();
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+        
         let count = 0;
         const interval = setInterval(() => {
             if (count >= 16) { // 16 beeps * 0.5s = 8 seconds total
                 clearInterval(interval);
-                audioCtx.close();
                 return;
             }
+            
+            // Try to resume if browser suspended it again
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             osc.connect(gain);
@@ -276,7 +308,7 @@ function playAlarmSound() {
             gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
             gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.35);
             
-            osc.start();
+            osc.start(0);
             osc.stop(audioCtx.currentTime + 0.4);
             count++;
         }, 500);

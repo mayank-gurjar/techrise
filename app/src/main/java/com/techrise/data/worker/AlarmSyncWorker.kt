@@ -3,6 +3,7 @@ package com.techrise.data.worker
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
@@ -65,7 +66,7 @@ class AlarmSyncWorker @AssistedInject constructor(
                 .apply()
 
             if (alarmTriggered) {
-                // Play alarming sound for 8 seconds
+                // Play alarming sound for 8 seconds (app-side player for foreground cases)
                 playAlarmSound(context, 8000)
             }
         }.onFailure {
@@ -98,21 +99,33 @@ class AlarmSyncWorker @AssistedInject constructor(
     }
 
     private fun triggerNewComplaintAlarm(complaintTitle: String, complaintId: String) {
-        val channelId = "techrise_new_complaints"
+        val channelId = "techrise_new_complaints_v3"
         val notificationId = complaintId.hashCode()
 
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
 
         // Create Channel for Android 8.0+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val name = "Tech Rise New Complaints"
             val descriptionText = "Loud alarm warnings for newly received complaints"
             val importance = NotificationManager.IMPORTANCE_HIGH
+            
+            // Delete old channel if exists to reset config
+            notificationManager.deleteNotificationChannel("techrise_new_complaints")
+            
             val channel = NotificationChannel(channelId, name, importance).apply {
                 description = descriptionText
                 enableLights(true)
                 lightColor = android.graphics.Color.GREEN
                 enableVibration(true)
+                
+                val audioAttributes = AudioAttributes.Builder()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .build()
+                setSound(soundUri, audioAttributes)
             }
             notificationManager.createNotificationChannel(channel)
         }
@@ -123,28 +136,41 @@ class AlarmSyncWorker @AssistedInject constructor(
             .setContentText("New Ticket $complaintId: '$complaintTitle'")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setSound(soundUri)
             .setAutoCancel(true)
 
         notificationManager.notify(notificationId, builder.build())
     }
 
     private fun triggerEscalationAlarm(complaintTitle: String, complaintId: String) {
-        val channelId = "techrise_escalation_alarms"
+        val channelId = "techrise_escalation_alarms_v3"
         val notificationId = complaintId.hashCode() + 1 // Offset to avoid collisions
 
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
 
         // Create Channel for Android 8.0+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val name = "Tech Rise Escalation Alarms"
             val descriptionText = "Loud alarm warnings for 24-hour stagnant complaints"
             val importance = NotificationManager.IMPORTANCE_HIGH
+            
+            // Delete old channel if exists to reset config
+            notificationManager.deleteNotificationChannel("techrise_escalation_alarms")
+            
             val channel = NotificationChannel(channelId, name, importance).apply {
                 description = descriptionText
                 enableLights(true)
                 lightColor = android.graphics.Color.RED
                 enableVibration(true)
                 vibrationPattern = longArrayOf(100, 400, 100, 400, 100, 400, 500, 1000)
+                
+                val audioAttributes = AudioAttributes.Builder()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .build()
+                setSound(soundUri, audioAttributes)
             }
             notificationManager.createNotificationChannel(channel)
         }
@@ -155,6 +181,7 @@ class AlarmSyncWorker @AssistedInject constructor(
             .setContentText("Complaint $complaintId: '$complaintTitle' is unresolved for over 24 hours!")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setSound(soundUri)
             .setAutoCancel(true)
 
         notificationManager.notify(notificationId, builder.build())
